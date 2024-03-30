@@ -1,4 +1,4 @@
-FROM openjdk:8
-ADD target/XYZtechnologies-1.0.war XYZtechnologies-1.0.war 
-EXPOSE 8080
-ENTRYPOINT ["java","-jar","/XYZtechnologies-1.0.war"]
+FROM tomcat:9.0.86
+COPY target/XYZtechnologies-1.0.war /usr/local/tomcat/webapps
+EXPOSE 8081
+CMD /usr/local/tomcat/bin/catalina.sh run
