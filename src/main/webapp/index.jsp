@@ -2,6 +2,8 @@
 <body>
 <h2>Welcome to XYZ technologies</h2>
   <h3>This is admin Module</h3>
+ <h1>JOVI-binbashtechnologies</h1>
+<h3>Devops is Good!</h3>
   <button name="Add User" value="Add User" type="button" onclick="addUser()">Add User</button>  
 <script>  
 function addUser(){  
