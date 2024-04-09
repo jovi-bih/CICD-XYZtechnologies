@@ -1,0 +1,147 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk 'jdk17'
+        maven 'maven3'
+        // Assuming 'sonar-scanner' tool is configured in Jenkins Global Tool Configuration
+        // sonarScanner 'sonar-scanner'
+    }
+    
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+        DOCKER_IMAGE = 'xyztechnologies'
+        DOCKER_TAG = '$BUILD_NUMBER'
+        DOCKER_REGISTRY = 'docker.io/jovibih'
+        TOMCAT_HOME = '/opt/tomcat' // Specify the path to Tomcat installation
+        TOMCAT_HOST = "10.150.0.2"
+        TOMCAT_WEBAPPS = "${TOMCAT_HOME}/webapps"
+        
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                // Checkout the code from the Git repository
+                git branch: 'main', url: 'https://github.com/jovi-bih/CICD-XYZtechnologies.git'
+            }
+        }
+        
+        stage('Code Compile') {
+            agent {
+                label 'master'
+            }
+            steps {
+                // Compile the code using Maven
+                sh 'mvn clean compile'
+            }
+        }
+        
+        stage('Test (QA)') {
+            agent {
+                label 'qa'
+            }
+            steps {
+                // Run tests
+                sh 'mvn test'
+            }
+        }
+        
+        stage('Maven Integration (QA)') {
+            agent {
+                label 'qa'
+            }
+            steps {
+                // Perform Maven integration
+                sh 'mvn verify'
+            }
+        }
+        
+        stage('Trivy File System Scan (QA)') {
+            agent {
+                label 'qa'
+            }
+            steps {
+                // Perform file system scan using Trivy
+                sh 'trivy fs --format table -o trivy-fs-report.html .'
+            }
+        }
+        
+        stage('Code Build (Production)') {
+            agent {
+                label 'prod'
+            }
+            steps {
+                // Build the project
+                sh 'mvn clean install'
+            }
+        }
+        
+        stage('Docker Build & Tag Image (Production)') {
+            agent {
+                label 'prod'
+            }
+            steps {
+                // Build and tag Docker image
+                script {
+                    docker.build("docker.io/jovibih/xyztechnologies:$BUILD_NUMBER", "-f Dockerfile .")
+                }
+            }
+        }
+
+        stage('Trivy Docker Image Scan (Production)') {
+            agent {
+                label 'prod'
+            }
+            steps {
+                // Scan Docker image using Trivy
+                sh 'trivy image --format table -o trivy-fs-report.html jovibih/xyztechnologies:$BUILD_NUMBER'
+            }
+        }
+        
+        stage('Push Docker Image (Production)') {
+            agent {
+                label 'prod'
+            }
+            steps {
+                // Push Docker image to Docker registry
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', 'docker-creds') {
+                        docker.image("jovibih/xyztechnologies:$BUILD_NUMBER").push()
+                    }
+                }
+            }
+        }
+        
+        //stage('Deploy to Tomcat (Production)') {
+            //agent {
+                //label 'prod'
+            //}
+            //steps {
+                //deploy adapters: [tomcat9(credentialsId: 'Tomcat_Creds', path: '', url: 'http://35.245.144.87:8080')], contextPath: 'xyztechnologies-1.0', war: '**/*.war'
+        }
+    }
+    
+    stage('Deploy to Tomcat (Production)') {
+        agent {
+                label 'prod'
+            }
+             steps {
+                // Pull Docker image to Docker registry
+                git branch: 'main', url: 'https://github.com/jovi-bih/CICD-XYZtechnologies.git'
+                script {
+                    withDockerRegistry(credentialsId: 'docker-creds', toolName: 'docker') {
+                        //sh 'docker pull docker.io/jovibih/xyztechnologies:$BUILD_NUMBER'
+                         sh "docker run -d --name xyztechnologies -p 8082:8080 docker.io/jovibih/xyztechnologies:$BUILD_NUMBER"
+                    }
+                }
+        }
+    }
+
+
+
+
+    
+
+     
+

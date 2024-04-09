@@ -1,0 +1,124 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk 'jdk17'
+        maven 'maven3'
+        // Assuming 'sonar-scanner' tool is configured in Jenkins Global Tool Configuration
+        // sonarScanner 'sonar-scanner'
+    }
+    
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+        DOCKER_IMAGE = 'xyztechnologies'
+        DOCKER_TAG = '$BUILD_NUMBER'
+        DOCKER_REGISTRY = 'docker.io/jovibih'
+        TOMCAT_HOME = '/opt/tomcat' // Specify the path to Tomcat installation
+        TOMCAT_WEBAPPS = "${TOMCAT_HOME}/webapps"
+    }
+
+    stages {
+        stage('1. GIT CHECKOUT') {
+            steps {
+                // Checkout the code from the Git repository
+                git branch: 'main', url: 'https://github.com/jovi-bih/CICD-XYZtechnologies.git'
+            }
+        }
+        
+        stage('2. CODE COMPILE') {
+            steps {
+                // Compile the code using Maven
+                sh 'mvn clean compile'
+            }
+        }
+        
+        stage('3. TEST') {
+            steps {
+                // Run tests
+                sh 'mvn test'
+            }
+        }
+        
+        stage('4. MAVEN INTEGRATION') {
+            steps {
+                // Perform Maven integration
+                sh 'mvn verify'
+            }
+        }
+        
+        stage('5. TRIVY FILE SYSTEM SCAN') {
+            steps {
+                // Perform file system scan using Trivy
+                sh 'trivy fs --format table -o trivy-fs-report.html .'
+            }
+        }
+        
+        stage('6. CODE BUILD') {
+            steps {
+                // Build the project
+                sh 'mvn clean install'
+            }
+        }
+        
+        stage('7. DOCKER BUILD & TAG IMAGE') {
+    steps {
+        // Build and tag Docker image
+        script {
+            withDockerRegistry(credentialsId: 'docker-creds', toolName: 'docker') {
+                sh """
+                    cd $WORKSPACE
+                    docker build --file Dockerfile --tag docker.io/jovibih/xyztechnologies:$BUILD_NUMBER .
+                """
+            }
+        }
+    }
+}
+
+        stage('8. TRIVY DOCKER IMAGE SCAN') {
+            steps {
+                // Scan Docker image using Trivy
+                sh 'trivy image --format table -o trivy-fs-report.html jovibih/xyztechnologies:$BUILD_NUMBER'
+            }
+        }
+        
+        stage('9. PUSH DOCKER IMAGE') {
+            steps {
+                // Push Docker image to Docker registry
+                script {
+                    withDockerRegistry(credentialsId: 'docker-creds', toolName: 'docker') {
+                        sh 'docker push docker.io/jovibih/xyztechnologies:$BUILD_NUMBER'
+                    }
+                }
+            }
+        }
+         
+        //stage('Deploy to Tomcat') {
+            //steps {
+                //deploy adapters: [tomcat9(credentialsId: 'Tomcat_Creds', path: '', url: 'http://35.245.144.87:8080')], contextPath: 'xyztechnologies-1.0', war: '**/*.war'
+            //}
+        //}
+    
+    stage('Deploy to Tomcat') {
+        agent {
+                label 'prod'
+        }
+        steps {
+                // Pull Docker image to Docker registry
+                git branch: 'main', url: 'https://github.com/jovi-bih/CICD-XYZtechnologies.git'
+                script {
+                    withDockerRegistry(credentialsId: 'docker-creds', toolName: 'docker') {
+                        //sh 'docker pull docker.io/jovibih/xyztechnologies:$BUILD_NUMBER'
+                         sh "docker run -d --name xyztechnologies-$BUILD_NUMBER -p 8082:8080 docker.io/jovibih/xyztechnologies:$BUILD_NUMBER"
+                    }
+                }
+        }
+    }
+    }
+}
+    
+
+    
+
+                    
+
+    
